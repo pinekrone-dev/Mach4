@@ -514,6 +514,8 @@ def step3_find_candidates(
                 "sic_label":   label,
                 "distance_mi": round(dist, 1),
                 "address":     detail.get("formatted_address", ""),
+                "lat":         plat,
+                "lng":         plng,
                 "place_id":    pid,
             })
             found_for_sic += 1
@@ -559,6 +561,8 @@ def step3_find_candidates(
                     "sic_label":   label,
                     "distance_mi": round(dist, 1),
                     "address":     detail.get("formatted_address", ""),
+                    "lat":         plat,
+                    "lng":         plng,
                     "place_id":    pid,
                 })
                 found_for_sic += 1
