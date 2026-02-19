@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Studio — HBU Analysis</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; }
+        #map { height: 560px; border-radius: 16px; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1); }
+        .score-ring { width: 100px; height: 100px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.75rem; font-weight: 800; }
+        .hbu-pass { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: #065f46; border: 3px solid #34d399; }
+        .hbu-marginal { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #92400e; border: 3px solid #fbbf24; }
+        .hbu-fail { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #991b1b; border: 3px solid #f87171; }
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        .legend-dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
+        .tab-active { background: #1e40af; color: white; }
+        .tab-inactive { background: #f1f5f9; color: #475569; }
+    </style>
+</head>
+<body class="bg-white text-slate-900">
+<div class="max-w-7xl mx-auto p-8">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-10">
+        <div class="flex items-center gap-4">
+            <div class="w-12 h-12 bg-gradient-to-br from-violet-600 to-purple-600 rounded-2xl flex items-center justify-center text-white text-3xl">
+                <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>
+            </div>
+            <div>
+                <h1 class="text-4xl font-bold tracking-tight">AI Studio</h1>
+                <p class="text-slate-500 text-xl -mt-1">Highest &amp; Best Use Analysis</p>
+            </div>
+        </div>
+        <div class="text-xs font-mono bg-violet-100 text-violet-700 px-4 py-2 rounded-3xl">100% free APIs &mdash; no keys needed</div>
+    </div>
+
+    <div class="bg-violet-50 border border-violet-200 rounded-3xl p-5 mb-8 text-sm">
+        <strong>How it works:</strong> Enter any property address. The tool geocodes it via Nominatim, pulls surrounding land-use &amp; POI data from OpenStreetMap/Overpass, then scores the four HBU tests: <em>Legally Permissible, Physically Possible, Financially Feasible, Maximally Productive</em>. No API keys required.
+    </div>
+
+    <!-- Main grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+        <!-- Left panel -->
+        <div class="lg:col-span-4 space-y-6">
+
+            <!-- Address input -->
+            <div class="bg-white border border-slate-200 rounded-3xl p-8">
+                <label class="text-xs text-slate-500 block mb-2 font-medium">Subject Property Address</label>
+                <input id="addressInput" type="text" value="1000 Bristol St N, Newport Beach, CA 92660"
+                       class="w-full bg-white border border-slate-300 rounded-2xl px-5 py-4 text-lg mb-4 focus:outline-none focus:border-violet-500"
+                       placeholder="Enter property address...">
+
+                <label class="text-xs text-slate-500 block mb-2 font-medium">Current / Proposed Use</label>
+                <select id="proposedUse" class="w-full bg-white border border-slate-300 rounded-2xl px-5 py-4 text-lg mb-4 focus:outline-none focus:border-violet-500">
+                    <option value="retail">Retail / Commercial</option>
+                    <option value="office">Office</option>
+                    <option value="multifamily">Multifamily Residential</option>
+                    <option value="industrial">Industrial / Warehouse</option>
+                    <option value="mixed_use">Mixed Use</option>
+                    <option value="hotel">Hotel / Hospitality</option>
+                    <option value="medical">Medical Office</option>
+                    <option value="restaurant">Restaurant / Food Service</option>
+                    <option value="single_family">Single Family Residential</option>
+                    <option value="vacant">Vacant Land</option>
+                </select>
+
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="text-xs text-slate-500 block mb-2 font-medium">Analysis Radius</label>
+                        <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3">
+                            <input id="analysisRadius" type="number" value="0.5" step="0.1" min="0.1" max="3.0" class="w-16 bg-transparent text-xl font-medium focus:outline-none">
+                            <span class="text-slate-400 text-sm">miles</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-500 block mb-2 font-medium">Parcel Size (est.)</label>
+                        <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3">
+                            <input id="parcelSize" type="number" value="1.0" step="0.1" min="0.1" class="w-16 bg-transparent text-xl font-medium focus:outline-none">
+                            <span class="text-slate-400 text-sm">acres</span>
+                        </div>
+                    </div>
+                </div>
+
+                <label class="text-xs text-slate-500 block mb-2 font-medium">Zoning (if known)</label>
+                <select id="zoningInput" class="w-full bg-white border border-slate-300 rounded-2xl px-5 py-4 text-lg mb-6 focus:outline-none focus:border-violet-500">
+                    <option value="auto">Auto-detect from surroundings</option>
+                    <option value="C-1">C-1 (Neighborhood Commercial)</option>
+                    <option value="C-2">C-2 (General Commercial)</option>
+                    <option value="C-3">C-3 (Heavy Commercial)</option>
+                    <option value="M-1">M-1 (Light Industrial)</option>
+                    <option value="M-2">M-2 (Heavy Industrial)</option>
+                    <option value="R-1">R-1 (Single Family Residential)</option>
+                    <option value="R-2">R-2 (Low-Density Multi-Family)</option>
+                    <option value="R-3">R-3 (Medium-Density Multi-Family)</option>
+                    <option value="R-4">R-4 (High-Density Multi-Family)</option>
+                    <option value="MU">MU (Mixed Use)</option>
+                    <option value="PD">PD (Planned Development)</option>
+                    <option value="OS">OS (Open Space)</option>
+                </select>
+
+                <button onclick="loadProperty()"
+                        class="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white font-bold py-5 rounded-3xl text-xl shadow-lg transition-all">
+                    Load Property &amp; Pull Surroundings
+                </button>
+
+                <div id="statusLog" class="mt-4 text-xs text-slate-500"></div>
+            </div>
+
+            <!-- Surrounding data summary -->
+            <div class="bg-white border border-slate-200 rounded-3xl p-8">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold">Surrounding Uses</h2>
+                    <span id="poiCount" class="bg-violet-100 text-violet-700 px-4 py-1 rounded-3xl text-sm font-medium">0</span>
+                </div>
+                <div id="surroundingSummary" class="text-sm text-slate-500">Load a property to see surrounding land uses.</div>
+                <div id="surroundingList" class="space-y-2 max-h-72 overflow-auto mt-4"></div>
+            </div>
+
+            <!-- Map legend -->
+            <div class="bg-white border border-slate-200 rounded-3xl p-6">
+                <h3 class="font-semibold mb-3 text-sm">Map Legend</h3>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div class="flex items-center gap-2"><span class="legend-dot" style="background:#ef4444"></span> Subject Property</div>
+                    <div class="flex items-center gap-2"><span class="legend-dot" style="background:#3b82f6"></span> Commercial</div>
+                    <div class="flex items-center gap-2"><span class="legend-dot" style="background:#22c55e"></span> Residential</div>
+                    <div class="flex items-center gap-2"><span class="legend-dot" style="background:#f59e0b"></span> Industrial</div>
+                    <div class="flex items-center gap-2"><span class="legend-dot" style="background:#8b5cf6"></span> Office / Medical</div>
+                    <div class="flex items-center gap-2"><span class="legend-dot" style="background:#ec4899"></span> Food / Hospitality</div>
+                    <div class="flex items-center gap-2"><span class="legend-dot" style="background:#06b6d4"></span> Education / Civic</div>
+                    <div class="flex items-center gap-2"><span class="legend-dot" style="background:#64748b"></span> Other</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right panel: Map -->
+        <div class="lg:col-span-8">
+            <div id="map"></div>
+            <div class="text-xs text-slate-400 mt-3 text-center">Map &copy; OpenStreetMap &bull; Geocoding: Nominatim &bull; POI data: Overpass API &mdash; all 100% free</div>
+        </div>
+    </div>
+
+    <!-- HBU Analysis Section -->
+    <div class="mt-12 bg-white border border-slate-200 rounded-3xl p-10">
+        <button onclick="runHBUAnalysis()"
+                class="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white font-bold text-2xl py-8 rounded-3xl shadow-xl transition-all">
+            Run Full HBU Analysis
+        </button>
+        <div id="hbuResults" class="mt-10"></div>
+    </div>
+
+    <!-- Export -->
+    <div class="mt-6 flex gap-4">
+        <button onclick="exportReport()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-3xl font-medium text-lg transition-all">Export Full Report (CSV)</button>
+        <button onclick="printReport()" class="flex-1 border border-slate-300 hover:bg-slate-50 py-4 rounded-3xl font-medium text-lg transition-all">Print Report</button>
+    </div>
+</div>
+
+<script>
+// ===================== STATE =====================
+let map, poiLayer, radiusCircle, subjectMarker;
+let centerLat = 33.66, centerLon = -117.87;
+let propertyName = "";
+let surroundingPOIs = [];
+let landUseBreakdown = {};
+let detectedZoning = "auto";
+let hbuResult = null;
+
+// ===================== CATEGORY MAPPING =====================
+const CAT_COLORS = {
+    commercial: '#3b82f6',
+    residential: '#22c55e',
+    industrial: '#f59e0b',
+    office: '#8b5cf6',
+    food: '#ec4899',
+    civic: '#06b6d4',
+    other: '#64748b'
+};
+
+function classifyPOI(tags) {
+    if (!tags) return { category: 'other', label: 'Unknown' };
+    const shop = (tags.shop || '').toLowerCase();
+    const amenity = (tags.amenity || '').toLowerCase();
+    const building = (tags.building || '').toLowerCase();
+    const landuse = (tags.landuse || '').toLowerCase();
+    const office = (tags.office || '').toLowerCase();
+    const leisure = (tags.leisure || '').toLowerCase();
+    const tourism = (tags.tourism || '').toLowerCase();
+
+    if (shop || amenity === 'marketplace' || building === 'retail' || building === 'commercial')
+        return { category: 'commercial', label: tags.name || shop || 'Retail' };
+    if (['restaurant','cafe','fast_food','bar','pub','food_court','ice_cream','bakery'].includes(amenity) || tourism === 'hotel' || tourism === 'motel')
+        return { category: 'food', label: tags.name || amenity || 'Food/Hospitality' };
+    if (office || amenity === 'doctors' || amenity === 'dentist' || amenity === 'clinic' || amenity === 'hospital' || amenity === 'veterinary')
+        return { category: 'office', label: tags.name || office || amenity || 'Office/Medical' };
+    if (building === 'industrial' || building === 'warehouse' || landuse === 'industrial')
+        return { category: 'industrial', label: tags.name || 'Industrial' };
+    if (['apartments','house','residential','detached','semidetached_house','terrace'].includes(building) || landuse === 'residential')
+        return { category: 'residential', label: tags.name || building || 'Residential' };
+    if (['school','university','college','library','townhall','community_centre','place_of_worship','fire_station','police','post_office','courthouse'].includes(amenity))
+        return { category: 'civic', label: tags.name || amenity || 'Civic' };
+    if (leisure)
+        return { category: 'other', label: tags.name || leisure || 'Leisure' };
+
+    return { category: 'other', label: tags.name || 'Other' };
+}
+
+// ===================== GEOCODING (Nominatim — free) =====================
+async function geocode(address) {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1&addressdetails=1`, {
+        headers: { 'Accept': 'application/json' }
+    });
+    const data = await res.json();
+    if (data.length) {
+        propertyName = data[0].display_name;
+        return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), name: propertyName, address: data[0].address || {} };
+    }
+    throw new Error("Address not found via Nominatim. Please try a more specific address.");
+}
+
+// ===================== OVERPASS QUERIES (free) =====================
+async function pullSurroundings(lat, lon, radiusMeters) {
+    const r = Math.round(radiusMeters);
+    // Comprehensive query: shops, amenities, offices, buildings, land use, tourism, leisure
+    const query = `[out:json][timeout:45];
+(
+  node(around:${r},${lat},${lon})[shop];
+  way(around:${r},${lat},${lon})[shop];
+  node(around:${r},${lat},${lon})[amenity];
+  way(around:${r},${lat},${lon})[amenity];
+  node(around:${r},${lat},${lon})[office];
+  way(around:${r},${lat},${lon})[office];
+  node(around:${r},${lat},${lon})[tourism];
+  way(around:${r},${lat},${lon})[tourism];
+  node(around:${r},${lat},${lon})[leisure];
+  way(around:${r},${lat},${lon})[leisure];
+  way(around:${r},${lat},${lon})[building~"retail|commercial|industrial|warehouse|office|apartments|residential|hotel"];
+  way(around:${r},${lat},${lon})[landuse~"retail|commercial|industrial|residential"];
+);
+out center 300;`;
+    const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const results = [];
+    const seen = new Set();
+
+    (data.elements || []).forEach(el => {
+        const tags = el.tags || {};
+        const elLat = el.lat || (el.center && el.center.lat);
+        const elLon = el.lon || (el.center && el.center.lon);
+        if (!elLat || !elLon) return;
+
+        const classified = classifyPOI(tags);
+        const key = `${classified.label.toLowerCase()}_${elLat.toFixed(4)}_${elLon.toFixed(4)}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+
+        results.push({
+            name: classified.label,
+            category: classified.category,
+            lat: elLat,
+            lon: elLon,
+            tags: tags,
+            dist: haversine(lat, lon, elLat, elLon)
+        });
+    });
+
+    return results.sort((a, b) => a.dist - b.dist);
+}
+
+// Pull zoning/landuse polygons
+async function pullLandUseZones(lat, lon, radiusMeters) {
+    const r = Math.round(radiusMeters);
+    const query = `[out:json][timeout:30];
+(
+  way(around:${r},${lat},${lon})[landuse];
+  relation(around:${r},${lat},${lon})[landuse];
+  way(around:${r},${lat},${lon})["boundary"="administrative"];
+);
+out body;>;out skel qt;`;
+    try {
+        const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        const zones = {};
+        (data.elements || []).forEach(el => {
+            if (el.tags && el.tags.landuse) {
+                const lu = el.tags.landuse;
+                zones[lu] = (zones[lu] || 0) + 1;
+            }
+        });
+        return zones;
+    } catch (e) {
+        return {};
+    }
+}
+
+// Pull road / infrastructure data
+async function pullInfrastructure(lat, lon, radiusMeters) {
+    const r = Math.round(radiusMeters);
+    const query = `[out:json][timeout:25];
+(
+  way(around:${r},${lat},${lon})[highway~"motorway|trunk|primary|secondary|tertiary"];
+  node(around:${r},${lat},${lon})[highway="bus_stop"];
+  node(around:${r},${lat},${lon})[railway="station"];
+  node(around:${r},${lat},${lon})[amenity="parking"];
+  way(around:${r},${lat},${lon})[amenity="parking"];
+);
+out center 100;`;
+    try {
+        const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        let majorRoads = 0, busStops = 0, railStations = 0, parking = 0;
+        (data.elements || []).forEach(el => {
+            const tags = el.tags || {};
+            if (tags.highway && ['motorway','trunk','primary','secondary'].includes(tags.highway)) majorRoads++;
+            if (tags.highway === 'bus_stop') busStops++;
+            if (tags.railway === 'station') railStations++;
+            if (tags.amenity === 'parking') parking++;
+        });
+        return { majorRoads, busStops, railStations, parking };
+    } catch (e) {
+        return { majorRoads: 0, busStops: 0, railStations: 0, parking: 0 };
+    }
+}
+
+// ===================== UTILITY =====================
+function haversine(lat1, lon1, lat2, lon2) {
+    const R = 3958.8; // miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function status(msg) {
+    document.getElementById('statusLog').innerHTML = msg;
+}
+
+// ===================== MAP =====================
+function initMap(lat, lon) {
+    if (map) map.remove();
+    map = L.map('map').setView([lat, lon], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19
+    }).addTo(map);
+    poiLayer = L.layerGroup().addTo(map);
+}
+
+function plotPOIs() {
+    if (!poiLayer) return;
+    poiLayer.clearLayers();
+    surroundingPOIs.forEach(poi => {
+        if (!poi.lat || !poi.lon) return;
+        const color = CAT_COLORS[poi.category] || CAT_COLORS.other;
+        const marker = L.circleMarker([poi.lat, poi.lon], {
+            radius: 6, fillColor: color, color: '#fff', weight: 1.5, fillOpacity: 0.85
+        }).bindPopup(`<b>${poi.name}</b><br><span style="color:${color}">${poi.category}</span><br>${poi.dist.toFixed(2)} mi away`);
+        marker.addTo(poiLayer);
+    });
+}
+
+function renderSurroundings() {
+    // Category breakdown
+    const counts = {};
+    surroundingPOIs.forEach(p => { counts[p.category] = (counts[p.category] || 0) + 1; });
+
+    const summary = document.getElementById('surroundingSummary');
+    let html = '<div class="grid grid-cols-2 gap-2 mb-4">';
+    const catLabels = { commercial: 'Commercial', residential: 'Residential', industrial: 'Industrial', office: 'Office/Medical', food: 'Food/Hospitality', civic: 'Civic/Education', other: 'Other' };
+    Object.keys(counts).sort((a,b) => counts[b] - counts[a]).forEach(cat => {
+        const color = CAT_COLORS[cat] || CAT_COLORS.other;
+        html += `<div class="flex items-center gap-2 text-xs"><span class="legend-dot" style="background:${color}"></span> ${catLabels[cat] || cat}: <b>${counts[cat]}</b></div>`;
+    });
+    html += '</div>';
+    summary.innerHTML = html;
+
+    const list = document.getElementById('surroundingList');
+    list.innerHTML = '';
+    surroundingPOIs.slice(0, 60).forEach(poi => {
+        const color = CAT_COLORS[poi.category] || CAT_COLORS.other;
+        const div = document.createElement('div');
+        div.className = 'flex justify-between items-center p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm';
+        div.innerHTML = `
+            <div class="flex items-center gap-2">
+                <span class="legend-dot" style="background:${color}"></span>
+                <span class="font-medium truncate max-w-[180px]">${poi.name}</span>
+            </div>
+            <span class="text-xs text-slate-400">${poi.dist.toFixed(2)} mi</span>
+        `;
+        list.appendChild(div);
+    });
+    document.getElementById('poiCount').textContent = surroundingPOIs.length;
+}
+
+// ===================== LOAD PROPERTY =====================
+async function loadProperty() {
+    const address = document.getElementById('addressInput').value.trim();
+    if (!address) return alert("Enter an address.");
+    status('Geocoding address via Nominatim...');
+
+    try {
+        const loc = await geocode(address);
+        centerLat = loc.lat;
+        centerLon = loc.lon;
+        initMap(loc.lat, loc.lon);
+
+        // Subject marker
+        subjectMarker = L.marker([loc.lat, loc.lon], {
+            icon: L.divIcon({
+                html: '<div style="background:#ef4444;width:20px;height:20px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3)"></div>',
+                className: '', iconSize: [20,20], iconAnchor: [10,10]
+            })
+        }).bindPopup(`<b>Subject Property</b><br>${propertyName}`).addTo(map);
+
+        const radiusMiles = parseFloat(document.getElementById('analysisRadius').value) || 0.5;
+        const radiusMeters = radiusMiles * 1609.34;
+
+        // Radius circle
+        if (radiusCircle) radiusCircle.remove();
+        radiusCircle = L.circle([loc.lat, loc.lon], {
+            radius: radiusMeters, color: '#7c3aed', fillOpacity: 0.08, weight: 3, dashArray: '8 4'
+        }).addTo(map);
+
+        // Pull all data in parallel
+        status('Pulling surrounding POIs, land use, and infrastructure from OpenStreetMap...');
+        const [pois, zones, infra] = await Promise.all([
+            pullSurroundings(loc.lat, loc.lon, radiusMeters),
+            pullLandUseZones(loc.lat, loc.lon, radiusMeters),
+            pullInfrastructure(loc.lat, loc.lon, radiusMeters)
+        ]);
+
+        surroundingPOIs = pois;
+        landUseBreakdown = zones;
+        window._infra = infra;
+
+        plotPOIs();
+        renderSurroundings();
+
+        // Auto-detect zoning from surrounding land uses
+        if (document.getElementById('zoningInput').value === 'auto') {
+            detectedZoning = inferZoning(pois, zones);
+        } else {
+            detectedZoning = document.getElementById('zoningInput').value;
+        }
+
+        status(`Done! ${pois.length} POIs loaded. Detected area character: ${detectedZoning}`);
+    } catch (e) {
+        status('Error: ' + e.message);
+        alert("Error: " + e.message);
+        console.error(e);
+    }
+}
+
+// ===================== ZONING INFERENCE =====================
+function inferZoning(pois, landUseZones) {
+    const counts = {};
+    pois.forEach(p => { counts[p.category] = (counts[p.category] || 0) + 1; });
+
+    const total = pois.length || 1;
+    const commPct = ((counts.commercial || 0) + (counts.food || 0)) / total;
+    const resPct = (counts.residential || 0) / total;
+    const indPct = (counts.industrial || 0) / total;
+    const offPct = (counts.office || 0) / total;
+
+    // Also look at land use polygons
+    const luTotal = Object.values(landUseZones).reduce((a,b) => a+b, 0) || 1;
+    const luComm = ((landUseZones.commercial || 0) + (landUseZones.retail || 0)) / luTotal;
+    const luRes = (landUseZones.residential || 0) / luTotal;
+    const luInd = (landUseZones.industrial || 0) / luTotal;
+
+    if (indPct > 0.3 || luInd > 0.4) return 'M-1';
+    if (commPct > 0.5 || luComm > 0.4) {
+        if (resPct > 0.15 || luRes > 0.2) return 'MU';
+        return commPct > 0.7 ? 'C-2' : 'C-1';
+    }
+    if (offPct > 0.3) return 'C-1';
+    if (resPct > 0.5 || luRes > 0.5) {
+        if (counts.residential > 20) return 'R-3';
+        return 'R-1';
+    }
+    if (commPct > 0.2 && resPct > 0.2) return 'MU';
+    return 'C-1';
+}
+
+// ===================== HBU ANALYSIS ENGINE =====================
+function runHBUAnalysis() {
+    if (!surroundingPOIs.length) {
+        document.getElementById('hbuResults').innerHTML = '<div class="p-12 text-center text-slate-400 text-xl">Load a property first to pull surrounding data.</div>';
+        return;
+    }
+
+    const proposedUse = document.getElementById('proposedUse').value;
+    const parcelAcres = parseFloat(document.getElementById('parcelSize').value) || 1.0;
+    const infra = window._infra || { majorRoads: 0, busStops: 0, railStations: 0, parking: 0 };
+
+    const counts = {};
+    surroundingPOIs.forEach(p => { counts[p.category] = (counts[p.category] || 0) + 1; });
+    const total = surroundingPOIs.length || 1;
+
+    // ---- TEST 1: LEGALLY PERMISSIBLE ----
+    const legalScore = scoreLegallyPermissible(proposedUse, detectedZoning, counts, total);
+
+    // ---- TEST 2: PHYSICALLY POSSIBLE ----
+    const physicalScore = scorePhysicallyPossible(proposedUse, parcelAcres, infra, counts, total);
+
+    // ---- TEST 3: FINANCIALLY FEASIBLE ----
+    const financialScore = scoreFinanciallyFeasible(proposedUse, counts, total, infra, parcelAcres);
+
+    // ---- TEST 4: MAXIMALLY PRODUCTIVE ----
+    const maxProdScore = scoreMaximallyProductive(proposedUse, counts, total, infra, parcelAcres, legalScore, physicalScore, financialScore);
+
+    const overall = Math.round((legalScore.score + physicalScore.score + financialScore.score + maxProdScore.score) / 4);
+
+    // Determine best alternative uses
+    const alternatives = rankAlternativeUses(counts, total, infra, parcelAcres);
+
+    hbuResult = { legalScore, physicalScore, financialScore, maxProdScore, overall, alternatives, proposedUse, detectedZoning };
+
+    renderHBUResults(hbuResult);
+}
+
+function scoreLegallyPermissible(use, zoning, counts, total) {
+    let score = 50;
+    const factors = [];
+    const zoningPermissions = {
+        'C-1': { retail: 90, office: 85, restaurant: 85, medical: 80, mixed_use: 60, multifamily: 30, hotel: 40, industrial: 10, single_family: 15, vacant: 50 },
+        'C-2': { retail: 95, office: 90, restaurant: 90, medical: 85, mixed_use: 75, hotel: 70, multifamily: 40, industrial: 25, single_family: 15, vacant: 50 },
+        'C-3': { retail: 85, office: 80, restaurant: 85, industrial: 60, hotel: 65, mixed_use: 70, medical: 75, multifamily: 35, single_family: 10, vacant: 50 },
+        'M-1': { industrial: 95, office: 60, retail: 35, restaurant: 40, medical: 30, mixed_use: 30, multifamily: 10, hotel: 15, single_family: 5, vacant: 50 },
+        'M-2': { industrial: 95, office: 40, retail: 20, restaurant: 25, medical: 15, mixed_use: 15, multifamily: 5, hotel: 10, single_family: 5, vacant: 50 },
+        'R-1': { single_family: 95, multifamily: 20, retail: 10, office: 15, restaurant: 10, medical: 20, mixed_use: 15, industrial: 5, hotel: 5, vacant: 50 },
+        'R-2': { multifamily: 80, single_family: 90, retail: 15, office: 20, restaurant: 15, medical: 25, mixed_use: 25, industrial: 5, hotel: 10, vacant: 50 },
+        'R-3': { multifamily: 95, single_family: 70, retail: 25, office: 30, restaurant: 25, medical: 35, mixed_use: 45, industrial: 5, hotel: 20, vacant: 50 },
+        'R-4': { multifamily: 95, single_family: 40, mixed_use: 65, retail: 35, office: 40, restaurant: 35, medical: 40, industrial: 5, hotel: 35, vacant: 50 },
+        'MU':  { mixed_use: 95, retail: 85, office: 85, restaurant: 85, multifamily: 80, medical: 80, hotel: 70, single_family: 30, industrial: 20, vacant: 50 },
+        'PD':  { mixed_use: 80, retail: 75, office: 75, restaurant: 75, multifamily: 75, medical: 70, hotel: 65, single_family: 60, industrial: 40, vacant: 50 },
+        'OS':  { vacant: 90, single_family: 10, retail: 5, office: 5, restaurant: 10, medical: 5, industrial: 5, multifamily: 5, mixed_use: 5, hotel: 5 }
+    };
+
+    const zoneData = zoningPermissions[zoning] || zoningPermissions['C-1'];
+    score = zoneData[use] || 50;
+
+    if (score >= 75) factors.push(`${use} is generally permitted in ${zoning} zones`);
+    else if (score >= 45) factors.push(`${use} may require conditional/special use permit in ${zoning} zones`);
+    else factors.push(`${use} is likely not permitted by right in ${zoning} zones`);
+
+    // Surrounding conformity bonus
+    const commPct = ((counts.commercial || 0) + (counts.food || 0)) / total;
+    const resPct = (counts.residential || 0) / total;
+    if (['retail','restaurant','office','medical'].includes(use) && commPct > 0.4) {
+        score = Math.min(100, score + 8);
+        factors.push(`Strong commercial character nearby (${Math.round(commPct*100)}%) supports this use`);
+    }
+    if (['multifamily','single_family'].includes(use) && resPct > 0.4) {
+        score = Math.min(100, score + 8);
+        factors.push(`Strong residential character nearby (${Math.round(resPct*100)}%) supports this use`);
+    }
+
+    factors.push(`Detected/selected zoning: ${zoning}`);
+    return { score: Math.min(100, Math.max(0, Math.round(score))), factors, label: "Legally Permissible" };
+}
+
+function scorePhysicallyPossible(use, parcelAcres, infra, counts, total) {
+    let score = 70;
+    const factors = [];
+
+    // Size suitability
+    const sizeReqs = {
+        retail: { min: 0.2, ideal: 1.0 }, office: { min: 0.15, ideal: 0.75 },
+        multifamily: { min: 0.5, ideal: 2.0 }, industrial: { min: 1.0, ideal: 5.0 },
+        mixed_use: { min: 0.5, ideal: 2.0 }, hotel: { min: 0.5, ideal: 2.0 },
+        medical: { min: 0.15, ideal: 0.75 }, restaurant: { min: 0.1, ideal: 0.4 },
+        single_family: { min: 0.1, ideal: 0.25 }, vacant: { min: 0, ideal: 0 }
+    };
+    const req = sizeReqs[use] || { min: 0.2, ideal: 1.0 };
+
+    if (parcelAcres < req.min) {
+        score -= 30;
+        factors.push(`Parcel (${parcelAcres} ac) is below minimum for ${use} (${req.min} ac)`);
+    } else if (parcelAcres >= req.ideal) {
+        score += 10;
+        factors.push(`Parcel size (${parcelAcres} ac) is ideal for ${use}`);
+    } else {
+        factors.push(`Parcel size (${parcelAcres} ac) is adequate for ${use}`);
+    }
+
+    // Access / roads
+    if (infra.majorRoads >= 2) { score += 10; factors.push(`Good road access (${infra.majorRoads} major roads nearby)`); }
+    else if (infra.majorRoads === 0) { score -= 10; factors.push('Limited major road access detected'); }
+    else { factors.push('Adequate road access'); }
+
+    // Transit
+    if (infra.busStops > 0 || infra.railStations > 0) {
+        score += 5;
+        factors.push(`Public transit available (${infra.busStops} bus stops, ${infra.railStations} rail stations)`);
+    }
+
+    // Parking (relevant for commercial uses)
+    if (['retail','restaurant','office','medical','hotel'].includes(use)) {
+        if (infra.parking >= 3) { score += 5; factors.push('Good parking availability nearby'); }
+        else if (infra.parking === 0) { score -= 5; factors.push('Limited parking detected — may need structured/on-site parking'); }
+    }
+
+    // Topography/utilities — we assume adequate for urban areas (OSM doesn't have great topo data)
+    factors.push('Utilities assumed adequate (urban area)');
+
+    return { score: Math.min(100, Math.max(0, Math.round(score))), factors, label: "Physically Possible" };
+}
+
+function scoreFinanciallyFeasible(use, counts, total, infra, parcelAcres) {
+    let score = 60;
+    const factors = [];
+
+    // Demand indicators from surrounding mix
+    const commPct = ((counts.commercial || 0) + (counts.food || 0)) / total;
+    const resPct = (counts.residential || 0) / total;
+    const offPct = (counts.office || 0) / total;
+    const indPct = (counts.industrial || 0) / total;
+
+    // Demand signal for proposed use
+    const demandMap = {
+        retail: commPct > 0.3 ? 15 : (commPct > 0.15 ? 5 : -5),
+        restaurant: commPct > 0.25 ? 15 : 0,
+        office: offPct > 0.15 ? 10 : (commPct > 0.3 ? 5 : -5),
+        medical: offPct > 0.1 || commPct > 0.2 ? 10 : -5,
+        multifamily: resPct > 0.2 ? 10 : (commPct > 0.3 ? 15 : 0),
+        mixed_use: commPct > 0.2 ? 15 : 5,
+        hotel: commPct > 0.3 ? 10 : (offPct > 0.2 ? 10 : -5),
+        industrial: indPct > 0.2 ? 15 : (indPct > 0.1 ? 5 : -10),
+        single_family: resPct > 0.4 ? 10 : (resPct > 0.2 ? 0 : -10),
+        vacant: -20
+    };
+    const demandAdj = demandMap[use] || 0;
+    score += demandAdj;
+
+    if (demandAdj > 10) factors.push(`Strong demand indicators — surrounding uses support ${use}`);
+    else if (demandAdj > 0) factors.push(`Moderate demand indicators for ${use}`);
+    else if (demandAdj < -5) factors.push(`Weak demand indicators — limited surrounding support for ${use}`);
+    else factors.push(`Neutral demand signals for ${use}`);
+
+    // Market depth / concentration: too many of the same = saturation risk
+    if (use === 'retail' && (counts.commercial || 0) > 30) {
+        score -= 10;
+        factors.push('High retail saturation nearby — competition risk');
+    } else if (use === 'restaurant' && (counts.food || 0) > 15) {
+        score -= 8;
+        factors.push('High restaurant density — competition risk');
+    }
+
+    // Infrastructure quality boost
+    if (infra.majorRoads >= 2) { score += 8; factors.push('Strong infrastructure supports commercial feasibility'); }
+
+    // Residential nearby supports retail/food
+    if (['retail','restaurant','mixed_use'].includes(use) && resPct > 0.15) {
+        score += 8;
+        factors.push(`Residential population nearby (${Math.round(resPct*100)}%) provides customer base`);
+    }
+
+    // Parcel efficiency
+    const sqft = parcelAcres * 43560;
+    if (use === 'multifamily' && sqft > 40000) {
+        score += 5;
+        factors.push('Parcel size allows efficient multifamily development');
+    }
+
+    factors.push('Note: Detailed financials (cap rates, rent comps) require paid data sources');
+
+    return { score: Math.min(100, Math.max(0, Math.round(score))), factors, label: "Financially Feasible" };
+}
+
+function scoreMaximallyProductive(use, counts, total, infra, parcelAcres, legal, physical, financial) {
+    let score = Math.round((legal.score * 0.2 + physical.score * 0.3 + financial.score * 0.5));
+    const factors = [];
+
+    // Is this the BEST use? Compare to alternatives
+    const alternatives = rankAlternativeUses(counts, total, infra, parcelAcres);
+    const currentRank = alternatives.findIndex(a => a.use === use);
+
+    if (currentRank === 0) {
+        score = Math.min(100, score + 10);
+        factors.push(`${formatUseLabel(use)} appears to be the HIGHEST and BEST USE for this site`);
+    } else if (currentRank <= 2) {
+        factors.push(`${formatUseLabel(use)} ranks #${currentRank + 1} among alternative uses`);
+    } else {
+        score = Math.max(0, score - 10);
+        factors.push(`${formatUseLabel(use)} ranks #${currentRank + 1} — other uses may be more productive`);
+    }
+
+    if (alternatives.length > 0 && alternatives[0].use !== use) {
+        factors.push(`Top recommended use: ${formatUseLabel(alternatives[0].use)} (score: ${alternatives[0].score})`);
+    }
+
+    // Synergy with neighbors
+    const commPct = ((counts.commercial || 0) + (counts.food || 0)) / total;
+    if (['retail','restaurant','mixed_use'].includes(use) && commPct > 0.4) {
+        score += 5;
+        factors.push('Strong synergy with surrounding commercial cluster');
+    }
+
+    return { score: Math.min(100, Math.max(0, Math.round(score))), factors, label: "Maximally Productive" };
+}
+
+function rankAlternativeUses(counts, total, infra, parcelAcres) {
+    const uses = ['retail','office','multifamily','industrial','mixed_use','hotel','medical','restaurant','single_family'];
+    const results = uses.map(use => {
+        const l = scoreLegallyPermissible(use, detectedZoning, counts, total);
+        const p = scorePhysicallyPossible(use, parcelAcres, infra, counts, total);
+        const f = scoreFinanciallyFeasible(use, counts, total, infra, parcelAcres);
+        const combined = Math.round(l.score * 0.25 + p.score * 0.25 + f.score * 0.50);
+        return { use, score: combined, legal: l.score, physical: p.score, financial: f.score };
+    });
+    return results.sort((a, b) => b.score - a.score);
+}
+
+function formatUseLabel(use) {
+    const labels = {
+        retail: 'Retail / Commercial', office: 'Office', multifamily: 'Multifamily Residential',
+        industrial: 'Industrial / Warehouse', mixed_use: 'Mixed Use', hotel: 'Hotel / Hospitality',
+        medical: 'Medical Office', restaurant: 'Restaurant / Food Service',
+        single_family: 'Single Family Residential', vacant: 'Vacant Land'
+    };
+    return labels[use] || use;
+}
+
+// ===================== RENDER HBU RESULTS =====================
+function renderHBUResults(r) {
+    const tests = [r.legalScore, r.physicalScore, r.financialScore, r.maxProdScore];
+    const ringClass = s => s >= 70 ? 'hbu-pass' : (s >= 45 ? 'hbu-marginal' : 'hbu-fail');
+    const ringLabel = s => s >= 70 ? 'PASS' : (s >= 45 ? 'MARGINAL' : 'FAIL');
+    const bgClass = s => s >= 70 ? 'bg-emerald-50 border-emerald-200' : (s >= 45 ? 'bg-amber-50 border-amber-200' : 'bg-rose-50 border-rose-200');
+
+    let html = `<div class="fade-in">`;
+
+    // Overall score
+    html += `
+        <div class="flex items-center gap-8 mb-10 p-8 bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-200 rounded-3xl">
+            <div class="score-ring ${ringClass(r.overall)}">${r.overall}</div>
+            <div>
+                <h3 class="text-3xl font-bold">HBU Analysis: ${propertyName.split(',').slice(0,2).join(',')}</h3>
+                <p class="text-slate-500 mt-1">Proposed Use: <b>${formatUseLabel(r.proposedUse)}</b> &bull; Zoning: <b>${r.detectedZoning}</b> &bull; Overall: <b>${ringLabel(r.overall)}</b></p>
+            </div>
+        </div>
+    `;
+
+    // Four tests grid
+    html += '<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">';
+    tests.forEach(test => {
+        html += `
+            <div class="p-6 border rounded-3xl ${bgClass(test.score)}">
+                <div class="flex items-center gap-4 mb-4">
+                    <div class="score-ring ${ringClass(test.score)}" style="width:64px;height:64px;font-size:1.25rem">${test.score}</div>
+                    <div>
+                        <h4 class="text-lg font-bold">${test.label}</h4>
+                        <span class="text-sm font-medium ${test.score >= 70 ? 'text-emerald-700' : test.score >= 45 ? 'text-amber-700' : 'text-rose-700'}">${ringLabel(test.score)}</span>
+                    </div>
+                </div>
+                <ul class="space-y-2">
+                    ${test.factors.map(f => `<li class="text-sm text-slate-700 flex items-start gap-2"><span class="mt-1 text-xs">&#9679;</span>${f}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    });
+    html += '</div>';
+
+    // Alternative uses ranking
+    html += `
+        <div class="p-8 bg-slate-50 border border-slate-200 rounded-3xl mb-8">
+            <h4 class="text-xl font-bold mb-6">Alternative Use Ranking</h4>
+            <div class="space-y-3">
+    `;
+    r.alternatives.slice(0, 7).forEach((alt, i) => {
+        const isProposed = alt.use === r.proposedUse;
+        const barColor = alt.score >= 70 ? 'bg-emerald-500' : (alt.score >= 45 ? 'bg-amber-400' : 'bg-rose-400');
+        html += `
+            <div class="flex items-center gap-4 ${isProposed ? 'bg-violet-100 border border-violet-300 p-4 rounded-2xl' : 'p-2'}">
+                <span class="text-sm font-bold w-6 text-right text-slate-400">#${i+1}</span>
+                <div class="flex-1">
+                    <div class="flex justify-between mb-1">
+                        <span class="font-medium text-sm">${formatUseLabel(alt.use)} ${isProposed ? '<span class="text-violet-600 text-xs ml-2">(YOUR PROPOSED USE)</span>' : ''}</span>
+                        <span class="text-sm font-bold">${alt.score}</span>
+                    </div>
+                    <div class="w-full bg-slate-200 rounded-full h-2.5">
+                        <div class="${barColor} h-2.5 rounded-full transition-all" style="width:${alt.score}%"></div>
+                    </div>
+                    <div class="flex gap-4 mt-1 text-xs text-slate-400">
+                        <span>Legal: ${alt.legal}</span><span>Physical: ${alt.physical}</span><span>Financial: ${alt.financial}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div></div>';
+
+    // Conclusion
+    const best = r.alternatives[0];
+    const proposed = r.alternatives.find(a => a.use === r.proposedUse);
+    html += `
+        <div class="p-8 bg-gradient-to-br from-violet-50 to-purple-50 border border-violet-200 rounded-3xl">
+            <h4 class="text-xl font-bold mb-4">HBU Conclusion</h4>
+            <div class="text-slate-700 space-y-3 text-sm leading-relaxed">
+    `;
+
+    if (best.use === r.proposedUse) {
+        html += `<p><b>${formatUseLabel(r.proposedUse)}</b> appears to be the <span class="text-emerald-700 font-bold">Highest and Best Use</span> for this property based on surrounding land use patterns, infrastructure, and zoning indicators.</p>`;
+    } else {
+        html += `<p>Your proposed use (<b>${formatUseLabel(r.proposedUse)}</b>, score: ${proposed ? proposed.score : 'N/A'}) is viable but may not be the highest and best use.</p>`;
+        html += `<p>The analysis suggests <b>${formatUseLabel(best.use)}</b> (score: ${best.score}) as the <span class="text-emerald-700 font-bold">Highest and Best Use</span> based on surrounding land use patterns, zoning, and market indicators.</p>`;
+    }
+
+    html += `
+                <p class="text-xs text-slate-400 border-t border-slate-200 pt-4 mt-4">
+                    This analysis is based on publicly available OpenStreetMap data (POIs, land use, infrastructure) and heuristic scoring.
+                    For a formal appraisal-grade HBU, supplement with municipal zoning codes, market rent/sales comps, environmental reports, and financial pro formas.
+                </p>
+            </div>
+        </div>
+    `;
+
+    html += '</div>';
+    document.getElementById('hbuResults').innerHTML = html;
+}
+
+// ===================== EXPORT =====================
+function exportReport() {
+    if (!hbuResult) return alert("Run HBU Analysis first.");
+    let csv = "HBU Analysis Report\n";
+    csv += `Property,${propertyName}\n`;
+    csv += `Proposed Use,${formatUseLabel(hbuResult.proposedUse)}\n`;
+    csv += `Detected Zoning,${hbuResult.detectedZoning}\n`;
+    csv += `Overall Score,${hbuResult.overall}\n\n`;
+
+    csv += "Test,Score,Status\n";
+    [hbuResult.legalScore, hbuResult.physicalScore, hbuResult.financialScore, hbuResult.maxProdScore].forEach(t => {
+        csv += `"${t.label}",${t.score},${t.score >= 70 ? 'PASS' : t.score >= 45 ? 'MARGINAL' : 'FAIL'}\n`;
+    });
+
+    csv += "\nTest,Factor\n";
+    [hbuResult.legalScore, hbuResult.physicalScore, hbuResult.financialScore, hbuResult.maxProdScore].forEach(t => {
+        t.factors.forEach(f => { csv += `"${t.label}","${f.replace(/"/g,'""')}"\n`; });
+    });
+
+    csv += "\nAlternative Use Ranking\nRank,Use,Score,Legal,Physical,Financial\n";
+    hbuResult.alternatives.forEach((a, i) => {
+        csv += `${i+1},"${formatUseLabel(a.use)}",${a.score},${a.legal},${a.physical},${a.financial}\n`;
+    });
+
+    csv += "\nSurrounding POIs\nName,Category,Distance (mi)\n";
+    surroundingPOIs.slice(0, 100).forEach(p => {
+        csv += `"${p.name.replace(/"/g,'""')}","${p.category}",${p.dist.toFixed(3)}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'hbu_analysis_report.csv'; a.click();
+}
+
+function printReport() {
+    window.print();
+}
+
+// ===================== INIT =====================
+window.onload = () => {
+    initMap(centerLat, centerLon);
+};
+</script>
+</body>
+</html>
