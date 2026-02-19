@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#09090b">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Dude, Where's My Cigar?</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Inter:wght@300;400;500;600&display=swap');
+
+        *, *::before, *::after { box-sizing: border-box; }
+
+        :root {
+            --bg-dark: #09090b;
+            --gold: #D4AF37;
+            --gold-light: #FCF6BA;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            height: 100dvh;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #app-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-dark);
+            overflow: hidden;
+        }
+
+        /* Desktop: phone-frame mockup */
+        @media (min-width: 430px) {
+            #app-container {
+                width: 414px;
+                height: 95vh;
+                height: 95dvh;
+                max-height: 950px;
+                border-radius: 40px;
+                border: 8px solid #27272a;
+                box-shadow: 0 25px 50px -12px rgba(255, 255, 255, 0.05);
+            }
+        }
+
+        .title-font { font-family: 'Playfair Display', serif; }
+
+        /* --- Screen transitions --- */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-dark);
+            transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.4s ease;
+            will-change: transform, opacity;
+            z-index: 10;
+        }
+        .screen.slide-right { transform: translateX(100%); z-index: 20; }
+        .screen.slide-left  { transform: translateX(-30%); opacity: 0.5; z-index: 5; }
+        .screen.active       { transform: translateX(0); opacity: 1; z-index: 10; }
+
+        /* --- Reusable styles --- */
+        .gold-gradient {
+            background: linear-gradient(135deg, #BF953F, #FCF6BA, #B38728, #FBF5B7, #AA771C);
+        }
+        .gold-text {
+            background: linear-gradient(to right, #BF953F, #FCF6BA);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        /* Hide scrollbars but keep scrolling */
+        .scroll-area { -ms-overflow-style: none; scrollbar-width: none; }
+        .scroll-area::-webkit-scrollbar { display: none; }
+
+        /* Ambient glow on gold button hover */
+        .glow-btn { transition: box-shadow 0.3s ease, transform 0.15s ease; }
+        .glow-btn:hover { box-shadow: 0 0 50px rgba(191, 149, 63, 0.35); }
+        .glow-btn:active { transform: scale(0.96); }
+    </style>
+</head>
+<body class="text-white antialiased">
+
+<div id="app-container">
+
+    <!-- ============================== -->
+    <!-- SCREEN 1 — HOME                -->
+    <!-- ============================== -->
+    <div id="home" class="screen active">
+        <!-- Background image -->
+        <div class="absolute inset-0 z-0">
+            <img src="https://images.unsplash.com/photo-1623114112814-7494191d4e06?auto=format&fit=crop&q=80&w=800"
+                 class="w-full h-full object-cover opacity-30" alt="" loading="eager">
+            <div class="absolute inset-0 bg-[#09090b]/60 mix-blend-multiply"></div>
+        </div>
+
+        <!-- Centered content — flex-1 keeps it vertically centred -->
+        <div class="relative z-10 flex flex-col items-center justify-center flex-1 px-8 py-10">
+            <div class="text-6xl mb-6 drop-shadow-2xl select-none" aria-hidden="true">🚬</div>
+
+            <button id="startBtn" onclick="startApp()"
+                    class="w-full max-w-xs gold-gradient glow-btn text-black font-bold title-font
+                           text-2xl py-7 rounded-3xl
+                           flex flex-col items-center justify-center gap-3
+                           shadow-[0_0_40px_rgba(191,149,63,0.25)]">
+                <span id="startText" class="text-center leading-tight">Dude, Where's<br>My Cigar?</span>
+                <svg id="startLoader" class="hidden animate-spin h-8 w-8 text-black"
+                     xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10"
+                            stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2
+                             5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824
+                             3 7.938l3-2.647z"></path>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- ============================== -->
+    <!-- SCREEN 2 — TIER SELECT         -->
+    <!-- ============================== -->
+    <div id="tier" class="screen slide-right">
+        <!-- Header bar -->
+        <div class="px-5 pt-10 pb-2 flex items-center justify-between shrink-0">
+            <button onclick="nav('home')"
+                    class="p-2 -ml-2 text-zinc-400 active:scale-90 transition-transform"
+                    aria-label="Back">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+                </svg>
+            </button>
+            <div class="text-[10px] font-semibold tracking-[0.2em] text-[#D4AF37] uppercase">
+                Global Locator Active
+            </div>
+            <div class="w-6"></div>
+        </div>
+
+        <!-- Title -->
+        <div class="px-6 pb-3 text-center shrink-0">
+            <h2 class="title-font text-3xl font-bold text-white">Choose Level</h2>
+        </div>
+
+        <!-- Cards — scrollable when viewport is short -->
+        <div class="flex-1 min-h-0 overflow-y-auto scroll-area px-6 pb-8">
+            <div class="flex flex-col gap-4 py-2">
+
+                <!-- Tier 1 -->
+                <button onclick="pickTier(1)"
+                        class="glass-card rounded-2xl p-5 text-left cursor-pointer
+                               active:scale-[0.97] transition-all flex items-center gap-4 w-full">
+                    <div class="text-2xl shrink-0" aria-hidden="true">⭐</div>
+                    <div class="min-w-0">
+                        <div class="text-lg font-semibold text-white">Level 1 Premium</div>
+                        <div class="text-zinc-400 text-sm">Everyday excellence</div>
+                    </div>
+                </button>
+
+                <!-- Tier 2 -->
+                <button onclick="pickTier(2)"
+                        class="glass-card rounded-2xl p-5 text-left cursor-pointer
+                               active:scale-[0.97] transition-all flex items-center gap-4 w-full">
+                    <div class="text-2xl shrink-0" aria-hidden="true">⭐⭐</div>
+                    <div class="min-w-0">
+                        <div class="text-lg font-semibold text-white">Level 2 Premium</div>
+                        <div class="text-zinc-400 text-sm">Excellent variety</div>
+                    </div>
+                </button>
+
+                <!-- Tier 3 -->
+                <button onclick="pickTier(3)"
+                        class="glass-card rounded-2xl p-5 text-left cursor-pointer
+                               active:scale-[0.97] transition-all flex items-center gap-4 w-full
+                               border-[#D4AF37]/30">
+                    <div class="text-2xl shrink-0" aria-hidden="true">⭐⭐⭐</div>
+                    <div class="min-w-0">
+                        <div class="gold-text text-lg font-semibold">Level 3 Ultra-Premium</div>
+                        <div class="text-[#D4AF37] text-sm">World-class rarity</div>
+                    </div>
+                </button>
+
+            </div>
+        </div>
+
+        <!-- Search overlay (hidden by default via display:none) -->
+        <div id="searchOverlay"
+             class="absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex-col items-center justify-center"
+             style="display:none;">
+            <svg class="animate-spin h-12 w-12 text-[#D4AF37] mb-4"
+                 xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10"
+                        stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2
+                         5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824
+                         3 7.938l3-2.647z"></path>
+            </svg>
+            <div class="text-[#D4AF37] font-semibold tracking-widest uppercase text-sm animate-pulse">
+                Scanning Global Network...
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================== -->
+    <!-- SCREEN 3 — CIGAR RESULT        -->
+    <!-- ============================== -->
+    <div id="cigar" class="screen slide-right">
+        <!-- Back button (floats over hero) -->
+        <button onclick="nav('tier')"
+                class="absolute top-10 left-4 z-50 p-3 bg-black/40 backdrop-blur-md
+                       rounded-full text-white active:scale-90 transition-transform"
+                aria-label="Back">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2"
+                 viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+            </svg>
+        </button>
+
+        <!-- Scrollable hero + details -->
+        <div class="flex-1 min-h-0 overflow-y-auto scroll-area">
+            <!-- Hero image — constrained so it never eats the whole screen -->
+            <div id="cigar-hero" class="relative bg-zinc-900 shrink-0"
+                 style="height: clamp(180px, 35vh, 300px);"></div>
+
+            <!-- Details card that overlaps hero -->
+            <div class="relative -mt-6 bg-[#09090b] rounded-t-3xl pt-6 px-6 pb-4 z-20">
+                <div id="cigar-details"></div>
+            </div>
+        </div>
+
+        <!-- Sticky bottom button — always visible -->
+        <div class="shrink-0 px-6 pb-6 pt-3 bg-[#09090b]">
+            <div class="absolute left-0 right-0 -top-6 h-6
+                        bg-gradient-to-t from-[#09090b] to-transparent pointer-events-none z-10"
+                 style="position:relative; margin-top:-24px; height:24px;"></div>
+            <button id="mapBtn" onclick="goMap()"
+                    class="w-full gold-gradient glow-btn text-black font-semibold
+                           text-lg py-4 rounded-2xl flex justify-center items-center gap-2">
+                GET DRIVING DIRECTIONS
+            </button>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    let userLat = null, userLng = null, selectedTier, currentShop;
+
+    const cigarDB = {
+        1: {
+            name: "Arturo Fuente 8-5-8",
+            img: "https://images.unsplash.com/photo-1598236754020-0083232bb82a?auto=format&fit=crop&q=80&w=800",
+            desc: "Classic smooth everyday premium."
+        },
+        2: {
+            name: "Padron 1964 Anniversary",
+            img: "https://images.unsplash.com/photo-1597589574345-21d428574d20?auto=format&fit=crop&q=80&w=800",
+            desc: "Rich Nicaraguan masterpiece."
+        },
+        3: {
+            name: "Cohiba Behike 56",
+            img: "https://images.unsplash.com/photo-1529598864706-5381cdb1ecb1?auto=format&fit=crop&q=80&w=800",
+            desc: "Ultimate ultra-premium cigar."
+        }
+    };
+
+    /* ---- Navigation ---- */
+    function nav(targetId) {
+        const screens = ['home', 'tier', 'cigar'];
+        const targetIndex = screens.indexOf(targetId);
+        screens.forEach((id, index) => {
+            const el = document.getElementById(id);
+            if (index < targetIndex)      el.className = 'screen slide-left';
+            else if (index > targetIndex) el.className = 'screen slide-right';
+            else                          el.className = 'screen active';
+        });
+    }
+
+    /* ---- Location engine ---- */
+    function startApp() {
+        document.getElementById('startText').classList.add('hidden');
+        document.getElementById('startLoader').classList.remove('hidden');
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (p) => {
+                    userLat = p.coords.latitude;
+                    userLng = p.coords.longitude;
+                    nav('tier');
+                    resetStartBtn();
+                },
+                () => { useIPFallback(); },
+                { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+            );
+        } else {
+            useIPFallback();
+        }
+    }
+
+    async function useIPFallback() {
+        try {
+            const response = await fetch('https://get.geojs.io/v1/ip/geo.json');
+            const data = await response.json();
+            userLat = parseFloat(data.latitude);
+            userLng = parseFloat(data.longitude);
+            nav('tier');
+        } catch (err) {
+            alert("Please check your internet connection so we can locate the nearest shops.");
+        } finally {
+            resetStartBtn();
+        }
+    }
+
+    function resetStartBtn() {
+        document.getElementById('startText').classList.remove('hidden');
+        document.getElementById('startLoader').classList.add('hidden');
+    }
+
+    /* ---- Distance calc ---- */
+    function haversine(lat1, lon1, lat2, lon2) {
+        const R = 3958.8;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) ** 2 +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    /* ---- Overpass API fetch ---- */
+    async function fetchNearestGlobalShop() {
+        const query = `
+            [out:json][timeout:15];
+            (
+              node["shop"="tobacco"](around:50000, ${userLat}, ${userLng});
+              way["shop"="tobacco"](around:50000, ${userLat}, ${userLng});
+            );
+            out center 10;
+        `;
+        const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (data.elements && data.elements.length > 0) {
+                let shops = data.elements.map(el => {
+                    const lat = el.lat || el.center.lat;
+                    const lon = el.lon || el.center.lon;
+                    const tags = el.tags || {};
+
+                    let addressParts = [];
+                    if (tags['addr:housenumber']) addressParts.push(tags['addr:housenumber']);
+                    if (tags['addr:street'])      addressParts.push(tags['addr:street']);
+                    if (tags['addr:city'])         addressParts.push(tags['addr:city']);
+
+                    return {
+                        name: tags.name || "Premium Tobacconist",
+                        address: addressParts.length > 0
+                            ? addressParts.join(', ')
+                            : "Precise location loaded \u2014 tap directions",
+                        phone: tags.phone || tags['contact:phone'] || "Unlisted",
+                        lat, lng: lon,
+                        distance: Math.round(haversine(userLat, userLng, lat, lon) * 10) / 10
+                    };
+                });
+                shops.sort((a, b) => a.distance - b.distance);
+                return shops[0];
+            }
+        } catch (e) { console.error("API Error", e); }
+        return null;
+    }
+
+    /* ---- Tier selection ---- */
+    async function pickTier(t) {
+        selectedTier = t;
+        const overlay = document.getElementById('searchOverlay');
+        overlay.style.display = 'flex';
+
+        currentShop = await fetchNearestGlobalShop();
+
+        overlay.style.display = 'none';
+        buildCigarScreen();
+        nav('cigar');
+    }
+
+    /* ---- Build result screen ---- */
+    function buildCigarScreen() {
+        const c = cigarDB[selectedTier];
+
+        // Hero
+        document.getElementById('cigar-hero').innerHTML = `
+            <img src="${c.img}" class="w-full h-full object-cover" alt="${c.name}" loading="lazy">
+            <div class="absolute inset-0 bg-gradient-to-t from-[#09090b] via-[#09090b]/40 to-transparent"></div>
+        `;
+
+        // Shop info card
+        let shopHTML = '';
+        if (currentShop) {
+            const phoneLink = currentShop.phone !== 'Unlisted'
+                ? `<a href="tel:${currentShop.phone.replace(/[^0-9+]/g, '')}"
+                      class="inline-flex items-center gap-1.5 text-white text-sm font-semibold
+                             bg-white/10 px-3 py-1.5 rounded-lg mt-3 active:bg-white/20 transition-colors">
+                       <span aria-hidden="true">&#x1F4DE;</span> ${currentShop.phone}
+                   </a>`
+                : '';
+
+            shopHTML = `
+                <div class="glass-card rounded-2xl p-5 border-l-2 border-l-[#D4AF37] mt-5">
+                    <div class="text-[#D4AF37] text-[10px] uppercase tracking-widest font-bold mb-2">
+                        Closest Provider Found
+                    </div>
+                    <div class="flex justify-between items-start gap-3 mb-1">
+                        <div class="text-lg font-bold text-white leading-snug">${currentShop.name}</div>
+                        <div class="bg-[#D4AF37]/20 px-2 py-0.5 rounded text-xs font-bold
+                                    text-[#D4AF37] whitespace-nowrap shrink-0">
+                            ${currentShop.distance} mi
+                        </div>
+                    </div>
+                    <div class="text-zinc-400 text-sm leading-relaxed">${currentShop.address}</div>
+                    ${phoneLink}
+                </div>
+            `;
+        } else {
+            shopHTML = `
+                <div class="glass-card rounded-2xl p-5 border-l-2 border-l-zinc-500 mt-5">
+                    <div class="text-lg font-bold text-white mb-1">Search Network</div>
+                    <div class="text-zinc-400 text-sm leading-relaxed">
+                        We couldn't pull exact storefront data for your immediate area,
+                        but hit directions to map the closest premium tobacco providers.
+                    </div>
+                </div>
+            `;
+        }
+
+        // Assemble details
+        document.getElementById('cigar-details').innerHTML = `
+            <div class="text-[10px] font-semibold tracking-[0.2em] text-zinc-500 uppercase mb-1">
+                Level ${selectedTier} Recommendation
+            </div>
+            <div class="text-2xl font-bold title-font leading-tight mb-2 text-white">${c.name}</div>
+            <p class="text-zinc-300 text-base font-light leading-relaxed">${c.desc}</p>
+            ${shopHTML}
+        `;
+    }
+
+    /* ---- Directions ---- */
+    function goMap() {
+        if (currentShop) {
+            window.open(
+                `https://www.google.com/maps/dir/?api=1&destination=${currentShop.lat},${currentShop.lng}&travelmode=driving`,
+                '_blank'
+            );
+        } else {
+            window.open(
+                `https://www.google.com/maps/search/premium+cigar+shop/@${userLat},${userLng},12z`,
+                '_blank'
+            );
+        }
+    }
+</script>
+</body>
+</html>
