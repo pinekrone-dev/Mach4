@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mach4 SitePlanner — generative feasibility</title>
+  <meta name="description" content="Draw a parcel, pick a building type, and get massing, parking and a pro forma in real time." />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230d1014'/><rect x='6' y='8' width='20' height='6' fill='%23e8813a'/><rect x='6' y='18' width='20' height='6' fill='%235ad1ff'/></svg>" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="mark"></span>
+        <span class="name">SitePlanner</span>
+        <span class="tag">generative feasibility</span>
+      </div>
+      <nav id="typology-tabs" class="typ-tabs"></nav>
+      <div class="toolbar">
+        <button id="btn-edit" class="btn">Edit site</button>
+        <button id="btn-generate" class="btn primary">Generate</button>
+        <button id="btn-fit" class="btn">Fit</button>
+        <span class="sep"></span>
+        <button id="btn-png" class="btn">PNG</button>
+        <button id="btn-csv" class="btn">CSV</button>
+        <button id="btn-json" class="btn">JSON</button>
+        <button id="btn-reset" class="btn ghost">Reset</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside id="left-panel" class="panel left"></aside>
+
+      <div class="canvas-wrap">
+        <canvas id="canvas"></canvas>
+        <div id="layer-toggles" class="layer-toggles"></div>
+        <div class="legend">
+          <span><i style="background:#f7c59f"></i>Studio</span>
+          <span><i style="background:#f0a868"></i>1 Bed</span>
+          <span><i style="background:#e8813a"></i>2 Bed</span>
+          <span><i style="background:#c9611f"></i>3 Bed</span>
+          <span><i style="background:#39475a"></i>Stall</span>
+          <span><i style="background:#4b5a6e"></i>Deck</span>
+        </div>
+        <div class="hint">
+          drag a handle to reshape · click an edge to set the frontage ·
+          alt-click an edge to add a vertex · right-click a handle to remove it ·
+          <b>G</b> regenerate · <b>F</b> fit · <b>E</b> edit
+        </div>
+      </div>
+
+      <aside id="right-panel" class="panel right"></aside>
+    </main>
+
+    <footer id="status" class="statusbar"></footer>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

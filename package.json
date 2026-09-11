@@ -1,0 +1,11 @@
+{
+  "name": "siteplanner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Generative real-estate feasibility: massing, parking and pro forma in the browser.",
+  "type": "module",
+  "scripts": {
+    "start": "./run.sh",
+    "test": "node tools/smoke.mjs"
+  }
+}

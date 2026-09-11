@@ -1,9 +1,0 @@
-{
-  "api_key": "YOUR_GOOGLE_PLACES_API_KEY",
-  "center_name": "My Strip Center",
-  "lat": 33.6583,
-  "lng": -117.8667,
-  "center_radius_m": 200,
-  "exclusion_radius_mi": 5.0,
-  "candidate_search_radius_mi": 15.0
-}
