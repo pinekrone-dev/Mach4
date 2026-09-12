@@ -94,12 +94,17 @@ The 404 is the meaningful one. Without `not_found_handling` and a real
 `404.html`, every missing path answers 200 with index.html and a bare 200 tells
 you nothing.
 
-## Deploying by hand
+## Deploying from a machine that has keys.conf
 
 ```bash
-./stage.sh
-npx wrangler deploy            # needs CLOUDFLARE_API_TOKEN in the environment
+./deploy.sh            # or: npm run deploy
 ```
+
+It finds `keys.conf` by walking up from the repo (override with
+`KEYS_CONF=/path/to/keys.conf`), reads the token into the environment without
+printing it, verifies the token *value* at the account endpoint, stages,
+deploys, then checks each path by status and content type. An existing
+`CLOUDFLARE_API_TOKEN` in the environment wins over the file.
 
 Once the Action is live, prefer pushing: `wrangler deploy` replaces the whole
 Worker, so a manual deploy and a repo push race each other and the last one
