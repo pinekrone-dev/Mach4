@@ -1,0 +1,52 @@
+# Publishes SitePlanner to Cloudflare Pages -> planning.realestateaistudio.com
+#
+# Requires two repository secrets:
+#   CLOUDFLARE_API_TOKEN   account-owned token, Pages:Write on the one account
+#   CLOUDFLARE_ACCOUNT_ID  the 32-hex account id
+#
+# The project is created on first run if it does not exist. Attaching the
+# custom domain is a one-time step, see docs/DEPLOY.md.
+
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches: [main, claude/charming-mayer-iljhu7]
+  workflow_dispatch:
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run the test suite
+        run: node tools/smoke.mjs
+
+      # Assemble exactly what should be public. Building an explicit directory
+      # keeps .git, docs/ screenshots and tooling out of the deployment.
+      - name: Stage the site
+        run: |
+          mkdir -p dist
+          cp index.html styles.css 404.html dist/
+          cp -r src dist/src
+          echo "Staged:"; find dist -type f | sort
+
+      - name: Publish
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: >-
+            pages deploy dist
+            --project-name=siteplanner
+            --branch=main
+            --commit-dirty=true
