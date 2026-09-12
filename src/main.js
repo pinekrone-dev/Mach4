@@ -5,7 +5,7 @@ import { generate } from './generator.js';
 import { runProforma, sensitivity } from './proforma.js';
 import { View, render, UNIT_COLORS } from './render.js';
 import { PRESETS, parcelFromAcres } from './sites.js';
-import { area, distanceToSegment, toAcres, ensureCCW } from './geometry.js';
+import { area, distanceToSegment, toAcres, ensureCCW, pointInPolygon } from './geometry.js';
 import { el, fmt, field, numberInput, sliderInput, selectInput, section, stat, row, downloadBlob, toast } from './ui.js';
 
 const STORAGE_KEY = 'siteplanner.state.v1';
@@ -21,6 +21,7 @@ const state = {
   hoverVertex: -1,
   selectedVertex: -1,
   drag: null,
+  draw: null, // in-progress parcel outline, see startDraw()
   rightTab: 'metrics',
 };
 
@@ -77,7 +78,45 @@ function paint() {
     hoverVertex: state.hoverVertex,
     selectedVertex: state.selectedVertex,
     frontageEdge: state.params.frontageEdge,
+    draft: state.draw,
   });
+}
+
+// --- drawing a new parcel from scratch ------------------------------------
+
+function startDraw() {
+  state.draw = { points: [], cursor: null };
+  state.selectedVertex = -1;
+  document.getElementById('btn-draw').classList.add('on');
+  canvas.style.cursor = 'crosshair';
+  toast('Click to place corners · click the first one or press Enter to close · Esc cancels');
+  paint();
+}
+
+function cancelDraw() {
+  if (!state.draw) return;
+  state.draw = null;
+  document.getElementById('btn-draw').classList.remove('on');
+  canvas.style.cursor = 'default';
+  paint();
+}
+
+function finishDraw() {
+  if (!state.draw) return;
+  const pts = state.draw.points;
+  if (pts.length < 3) {
+    toast('A parcel needs at least three corners', 'warn');
+    return;
+  }
+  state.polygon = ensureCCW(pts);
+  state.presetKey = 'custom';
+  state.params.frontageEdge = 0;
+  state.selectedVertex = -1;
+  cancelDraw();
+  state.editing = true;
+  document.getElementById('btn-edit').classList.add('on');
+  regenerate({ refit: true, rebuildPanels: true });
+  toast(`Parcel closed — ${state.polygon.length} corners, ${toAcres(area(state.polygon)).toFixed(2)} ac`);
 }
 
 function setTypology(key) {
@@ -500,6 +539,22 @@ function bindCanvas() {
     const px = e.clientX - r.left;
     const py = e.clientY - r.top;
 
+    if (state.draw) {
+      if (e.button === 2) { cancelDraw(); return; }
+      const w = view.toWorld({ x: px, y: py });
+      const snap = e.shiftKey ? 1 : 5;
+      const pt = { x: Math.round(w.x / snap) * snap, y: Math.round(w.y / snap) * snap };
+      const pts = state.draw.points;
+      // Clicking the first handle closes the ring.
+      if (pts.length >= 3) {
+        const first = view.toScreen(pts[0]);
+        if (Math.hypot(first.x - px, first.y - py) <= 11) { finishDraw(); return; }
+      }
+      pts.push(pt);
+      paint();
+      return;
+    }
+
     if (e.button === 2) {
       const vi = vertexAt(px, py);
       if (vi >= 0 && state.polygon.length > 3) {
@@ -534,6 +589,13 @@ function bindCanvas() {
         }
         return;
       }
+      // Dragging from inside the parcel slides the whole thing; from outside
+      // it pans the view.
+      if (pointInPolygon(view.toWorld({ x: px, y: py }), state.polygon)) {
+        state.drag = { kind: 'move', last: view.toWorld({ x: px, y: py }) };
+        canvas.style.cursor = 'move';
+        return;
+      }
     }
     state.drag = { kind: 'pan', x: px, y: py };
   });
@@ -542,6 +604,25 @@ function bindCanvas() {
     const r = canvas.getBoundingClientRect();
     const px = e.clientX - r.left;
     const py = e.clientY - r.top;
+
+    if (state.draw) {
+      const w = view.toWorld({ x: px, y: py });
+      const snap = e.shiftKey ? 1 : 5;
+      state.draw.cursor = { x: Math.round(w.x / snap) * snap, y: Math.round(w.y / snap) * snap };
+      paint();
+      return;
+    }
+
+    if (state.drag && state.drag.kind === 'move') {
+      const w = view.toWorld({ x: px, y: py });
+      const dx = w.x - state.drag.last.x;
+      const dy = w.y - state.drag.last.y;
+      state.polygon = state.polygon.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+      state.drag.last = w;
+      state.presetKey = 'custom';
+      regenerate();
+      return;
+    }
 
     if (state.drag && state.drag.kind === 'pan') {
       view.pan(px - state.drag.x, py - state.drag.y);
@@ -571,11 +652,17 @@ function bindCanvas() {
   });
 
   const endDrag = () => {
-    if (state.drag && state.drag.kind === 'vertex') regenerate({ rebuildPanels: true });
+    if (state.drag && (state.drag.kind === 'vertex' || state.drag.kind === 'move')) {
+      regenerate({ rebuildPanels: true });
+    }
+    if (state.drag && state.drag.kind === 'move') canvas.style.cursor = 'default';
     state.drag = null;
   };
   canvas.addEventListener('pointerup', endDrag);
   canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('dblclick', (e) => {
+    if (state.draw) { e.preventDefault(); finishDraw(); }
+  });
 
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
@@ -586,6 +673,17 @@ function bindCanvas() {
 
   window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    if (state.draw) {
+      if (e.key === 'Escape') cancelDraw();
+      if (e.key === 'Enter') finishDraw();
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        state.draw.points.pop();
+        paint();
+      }
+      return;
+    }
+    if (e.key === 'd') { startDraw(); }
     if (e.key === 'f') { view.fit(state.scene.site); paint(); }
     if (e.key === 'e') { toggleEdit(); }
     if (e.key === 'g') { regenerate({ rebuildPanels: true }); toast('Scheme regenerated'); }
@@ -658,6 +756,9 @@ function exportPNG() {
 
 function bindToolbar() {
   document.getElementById('btn-edit').addEventListener('click', toggleEdit);
+  document.getElementById('btn-draw').addEventListener('click', () => {
+    if (state.draw) cancelDraw(); else startDraw();
+  });
   document.getElementById('btn-fit').addEventListener('click', () => { view.fit(state.scene.site); paint(); });
   document.getElementById('btn-generate').addEventListener('click', () => {
     regenerate({ rebuildPanels: true });

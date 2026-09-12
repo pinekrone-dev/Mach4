@@ -235,9 +235,57 @@ function drawEdgeDimensions(ctx, view, poly, frontageEdge) {
 
 // ---------------------------------------------------------------------------
 
+// The in-progress outline while the user is clicking out a new parcel.
+function drawDraft(ctx, view, draft) {
+  const pts = draft.points;
+  if (!pts.length) return;
+  const chain = draft.cursor ? [...pts, draft.cursor] : pts;
+
+  if (chain.length >= 3) {
+    path(ctx, view, chain);
+    ctx.fillStyle = 'rgba(90, 209, 255, 0.07)';
+    ctx.fill();
+  }
+
+  ctx.save();
+  ctx.setLineDash([6, 5]);
+  ctx.strokeStyle = THEME.site;
+  ctx.lineWidth = 1.75;
+  path(ctx, view, chain, chain.length >= 3);
+  ctx.stroke();
+  ctx.restore();
+
+  pts.forEach((p, i) => {
+    const s = view.toScreen(p);
+    const first = i === 0 && pts.length >= 3;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, first ? 7 : 4, 0, Math.PI * 2);
+    ctx.fillStyle = first ? THEME.handle : '#0d1014';
+    ctx.strokeStyle = THEME.handle;
+    ctx.lineWidth = 2;
+    ctx.fill();
+    ctx.stroke();
+  });
+
+  // Running length of the segment being drawn, and the area enclosed so far.
+  if (draft.cursor && pts.length) {
+    const last = pts[pts.length - 1];
+    const len = V.dist(last, draft.cursor);
+    const mid = { x: (last.x + draft.cursor.x) / 2, y: (last.y + draft.cursor.y) / 2 };
+    label(ctx, view, mid, `${len.toFixed(0)}'`, THEME.handle, 10);
+  }
+  if (chain.length >= 3) {
+    const a = area(chain);
+    label(ctx, view, centroid(chain), `${(a / 43560).toFixed(2)} ac`, THEME.site, 11);
+  }
+}
+
 export function render(view, scene, opts = {}) {
   const ctx = view.ctx;
-  const { layers = {}, editing = false, hoverVertex = -1, selectedVertex = -1, frontageEdge = 0 } = opts;
+  const {
+    layers = {}, editing = false, hoverVertex = -1, selectedVertex = -1,
+    frontageEdge = 0, draft = null,
+  } = opts;
 
   ctx.save();
   ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
@@ -246,6 +294,16 @@ export function render(view, scene, opts = {}) {
   ctx.fillRect(0, 0, view.w, view.h);
 
   if (layers.grid !== false) drawGrid(ctx, view);
+
+  // While drawing a new parcel the old scheme is not shown — nothing about it
+  // is true any more.
+  if (draft) {
+    drawDraft(ctx, view, draft);
+    drawScaleBar(ctx, view);
+    drawNorth(ctx, view);
+    ctx.restore();
+    return;
+  }
   if (!scene) { ctx.restore(); return; }
 
   // Site + buildable envelope

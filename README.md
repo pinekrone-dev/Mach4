@@ -25,11 +25,18 @@ opening `index.html` straight off the filesystem will not work.)
 
 ## What it does
 
-**Draw the site.** Start from a preset parcel or type a target acreage, then drag
-the vertex handles to reshape it. Click an edge to make it the street frontage,
-alt-click an edge to add a vertex, right-click a handle to delete one. Front,
+**Draw the site.** Hit **Draw parcel** and click out any number of corners —
+the outline rubber-bands as you go, showing the running edge length and the
+enclosed acreage; click the first handle or press Enter to close it. Or start
+from a preset parcel, or just type a target acreage.
+
+However it started, the parcel is an arbitrary multi-point polygon you can keep
+editing: drag any vertex, drag from inside to slide the whole parcel, alt-click
+an edge to insert a corner, right-click a handle to delete one, click an edge to
+make it the street frontage. Hold shift for 1' snapping instead of 5'. Front,
 side and rear setbacks are applied per edge — the generator works out which edge
-is which from the frontage you picked.
+is which from the frontage you picked — and the whole scheme re-solves on every
+drag.
 
 **Pick a typology.** Six are built in, each with its own layout rules:
 
