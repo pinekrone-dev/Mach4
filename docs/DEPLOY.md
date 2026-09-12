@@ -1,20 +1,31 @@
-# Deploying to planning.realestateaistudio.com
+# Deploying SitePlanner
 
-Target: a Cloudflare Pages project called `siteplanner` on the Real Estate AI
-Studio account, served at `planning.realestateaistudio.com`.
+Target: the `missfits` Worker on the Real Estate AI Studio Cloudflare account,
+currently reachable at `https://missfits.shiny-butterfly-2b90.workers.dev`, to
+be fronted by `planning.realestateaistudio.com`.
 
-State at the time of writing: the zone `realestateaistudio.com` is already on
-Cloudflare; `planning.realestateaistudio.com` does not resolve, so there is no
-existing site to overwrite and no diffing step needed.
+SitePlanner is a static site, so `wrangler.toml` declares an **assets-only
+Worker** — no `main`, no server code. Cloudflare serves `dist/` from the edge.
+`not_found_handling = "404-page"` makes a missing path return the real 404 page
+with a 404 status, rather than 200 with index.html.
 
-`.github/workflows/deploy.yml` does the publishing. It runs the test suite,
-stages `index.html`, `styles.css`, `404.html` and `src/` into `dist/`, and
-deploys that with wrangler. It needs two repository secrets and one one-time
-setup step.
+`stage.sh` assembles `dist/` from `index.html`, `styles.css`, `404.html` and
+`src/`, so `.git`, the docs screenshots and the test tooling never reach the
+edge. `.github/workflows/deploy.yml` runs the tests, stages, deploys, then
+verifies by status **and** content type per path.
+
+## State
+
+- [x] Worker `missfits` exists on the account
+- [x] `wrangler.toml`, `stage.sh` and the workflow are in the repo
+- [x] `wrangler deploy --dry-run` passes
+- [ ] `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` set as repo secrets
+- [ ] custom domain `planning.realestateaistudio.com` attached
+- [ ] first real deploy (the Worker still serves the stock "Hello world")
 
 ## 1. Mint a narrow token
 
-Account-owned, Pages:Write on this account only. Note that
+Account-owned, **Workers Scripts: Edit** on this account only. Note that
 `POST /user/tokens` fails when authenticating with an account-owned token —
 use the account endpoint:
 
@@ -22,18 +33,18 @@ use the account endpoint:
 CF_ACCOUNT=<32-hex account id>
 CF_TOKEN=<an existing token that can create tokens>
 
-# Confirm the permission group ids rather than trusting them blindly
+# Read the permission group id rather than trusting a hardcoded one
 curl -s "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/tokens/permission_groups" \
-  -H "Authorization: Bearer $CF_TOKEN" | jq '.result[] | select(.name|test("Pages"))'
+  -H "Authorization: Bearer $CF_TOKEN" | jq '.result[] | select(.name=="Workers Scripts Write")'
 
 curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/tokens" \
   -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
   -d '{
-    "name": "siteplanner-pages-deploy",
+    "name": "siteplanner-worker-deploy",
     "policies": [{
       "effect": "allow",
       "resources": { "com.cloudflare.api.account.'"$CF_ACCOUNT"'": "*" },
-      "permission_groups": [{ "id": "8d28297797f24fb8a0c332fe0866ec89" }]
+      "permission_groups": [{ "id": "<Workers Scripts Write id>" }]
     }]
   }'
 ```
@@ -56,54 +67,49 @@ GitHub → `pinekrone-dev/Mach4` → Settings → Secrets and variables → Acti
 | `CLOUDFLARE_ACCOUNT_ID` | the 32-hex account id |
 
 (A 32-hex string is an account id, never a token. Real API tokens are 40 chars;
-an account id used as a credential answers error 6111.)
+an account id used as a credential answers error 6111, which reads like a broken
+token and is not one.)
 
-## 3. Create the project, once
+Then: Actions → **Deploy** → Run workflow. It also runs on any push to `main`
+or `claude/charming-mayer-iljhu7`.
 
-```bash
-npx wrangler pages project create siteplanner --production-branch=main
-```
+## 3. Attach the custom domain, once
 
-Then run the workflow — Actions → "Deploy to Cloudflare Pages" → Run workflow.
-It is also triggered by any push to `main` or `claude/charming-mayer-iljhu7`.
+Easiest in the dashboard: Workers & Pages → `missfits` → Settings → Domains &
+Routes → Add → Custom domain → `planning.realestateaistudio.com`. Cloudflare
+creates the DNS record itself because the zone is on the same account.
 
-## 4. Attach the custom domain, once
+## 4. Verify like the deploy is lying
 
-```bash
-curl -s -X POST \
-  "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/pages/projects/siteplanner/domains" \
-  -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
-  -d '{"name":"planning.realestateaistudio.com"}'
-```
-
-Cloudflare adds the CNAME itself when the zone is on the same account. If it
-does not, add `planning` as a proxied CNAME to `siteplanner.pages.dev`.
-
-## 5. Verify like the deploy is lying
-
-The pages.dev apex serves the *previous* deployment for 30–45 seconds after
-wrangler reports success, so wait before concluding anything failed. Then check
-by content type and status, not a bare 200:
+The workflow already does this, but by hand:
 
 ```bash
-curl -sI https://planning.realestateaistudio.com/            # 200, text/html
-curl -sI https://planning.realestateaistudio.com/src/main.js # 200, javascript
-curl -so /dev/null -w '%{http_code}\n' \
-     https://planning.realestateaistudio.com/definitely-not-a-page   # 404
+base=https://planning.realestateaistudio.com
+curl -sI $base/                # 200, text/html
+curl -sI $base/src/main.js     # 200, javascript
+curl -so /dev/null -w '%{http_code}\n' $base/definitely-not-a-page   # 404
 ```
 
-The 404 check matters: with no `404.html` Pages answers 200 with index.html for
-every missing path, so a bare 200 proves nothing. `404.html` is in the repo for
-exactly this reason.
+The 404 is the meaningful one. Without `not_found_handling` and a real
+`404.html`, every missing path answers 200 with index.html and a bare 200 tells
+you nothing.
 
-## After this
+## Deploying by hand
 
-The repo is then the only write path. `wrangler pages deploy` replaces the whole
-site, so a manual wrangler push and a repo push race each other and the last one
-wins. Commit to the repo; if you wrangler-deploy to test, it survives only until
-the next push.
+```bash
+./stage.sh
+npx wrangler deploy            # needs CLOUDFLARE_API_TOKEN in the environment
+```
 
-To see which is which:
-`GET /accounts/$CF_ACCOUNT/pages/projects/siteplanner/deployments` — entries
-with a commit message came from the Action, entries without came from someone
-running wrangler by hand.
+Once the Action is live, prefer pushing: `wrangler deploy` replaces the whole
+Worker, so a manual deploy and a repo push race each other and the last one
+wins. A hand deploy survives only until the next push.
+
+## Notes
+
+- The Worker name `missfits` is what shows in the `*.workers.dev` URL. Once the
+  custom domain is attached that URL stops mattering, but renaming is cheap
+  while nothing points at it: create a Worker with the new name, change `name`
+  in `wrangler.toml`, redeploy, move the domain, delete the old one.
+- The site is public with no auth. If it should not be, put Cloudflare Access
+  in front of the custom domain — that needs no application change.

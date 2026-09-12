@@ -1,0 +1,14 @@
+# SitePlanner is a static site, so this is an assets-only Worker: no `main`,
+# no server code. Cloudflare serves dist/ straight from the edge.
+#
+# dist/ is assembled by the deploy workflow (and by `npm run stage`) so that
+# .git, the docs screenshots and the test tooling never reach the edge.
+
+name = "missfits"
+compatibility_date = "2026-09-01"
+
+[assets]
+directory = "./dist"
+# Serve the real 404.html with a 404 status instead of answering 200 with
+# index.html for every missing path.
+not_found_handling = "404-page"

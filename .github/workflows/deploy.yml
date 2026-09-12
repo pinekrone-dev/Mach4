@@ -1,13 +1,13 @@
-# Publishes SitePlanner to Cloudflare Pages -> planning.realestateaistudio.com
+# Publishes SitePlanner to the `missfits` Cloudflare Worker.
+#
+# It is an assets-only Worker (see wrangler.toml) — no server code, the static
+# site is served straight from the edge.
 #
 # Requires two repository secrets:
-#   CLOUDFLARE_API_TOKEN   account-owned token, Pages:Write on the one account
+#   CLOUDFLARE_API_TOKEN   account-owned token, Workers Scripts:Edit
 #   CLOUDFLARE_ACCOUNT_ID  the 32-hex account id
-#
-# The project is created on first run if it does not exist. Attaching the
-# custom domain is a one-time step, see docs/DEPLOY.md.
 
-name: Deploy to Cloudflare Pages
+name: Deploy
 
 on:
   push:
@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: pages-deploy
+  group: worker-deploy
   cancel-in-progress: true
 
 jobs:
@@ -31,22 +31,31 @@ jobs:
       - name: Run the test suite
         run: node tools/smoke.mjs
 
-      # Assemble exactly what should be public. Building an explicit directory
-      # keeps .git, docs/ screenshots and tooling out of the deployment.
       - name: Stage the site
-        run: |
-          mkdir -p dist
-          cp index.html styles.css 404.html dist/
-          cp -r src dist/src
-          echo "Staged:"; find dist -type f | sort
+        run: ./stage.sh
 
       - name: Publish
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: >-
-            pages deploy dist
-            --project-name=siteplanner
-            --branch=main
-            --commit-dirty=true
+          command: deploy
+
+      # A bare 200 proves nothing, so check status and content type per path.
+      - name: Verify the deployment
+        run: |
+          sleep 20
+          base="https://missfits.shiny-butterfly-2b90.workers.dev"
+          fail=0
+          check() {
+            read -r code type < <(curl -s -o /dev/null \
+              -w '%{http_code} %{content_type}' --max-time 20 "$base$1")
+            echo "$1 -> $code $type"
+            case "$type" in $3) ;; *) echo "   unexpected type"; fail=1 ;; esac
+            [ "$code" = "$2" ] || { echo "   expected $2"; fail=1; }
+          }
+          check /                 200 'text/html*'
+          check /src/main.js      200 '*javascript*'
+          check /styles.css       200 'text/css*'
+          check /no-such-page     404 '*'
+          exit $fail

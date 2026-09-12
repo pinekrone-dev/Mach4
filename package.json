@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "./run.sh",
-    "test": "node tools/smoke.mjs"
+    "test": "node tools/smoke.mjs",
+    "stage": "./stage.sh"
   }
 }
